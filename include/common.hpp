@@ -33,6 +33,7 @@
 // set the PRE_ALLOC[_ALTO] definitions in main.c and alto.c accordingly for the general
 // usage of hugepages
 
+
 typedef unsigned long long IType;
 #if 1
 typedef double FType;

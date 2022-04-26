@@ -13,6 +13,7 @@
 #include "common.hpp"
 #include "alto.hpp"
 #include "cpd.hpp"
+#include "tt.hpp"
 
 #include <unistd.h>
 #include <sys/resource.h>
@@ -42,6 +43,8 @@
 	exit(-1);							\
 } while (0)
 
+
+
 void BenchmarkAlto(SparseTensor* X, int max_iters, IType rank,
                    IType seed, int target_mode, int num_partitions);
 
@@ -66,6 +69,7 @@ static long PrintNodeMem(int node, const char* tag);
 const struct option long_opt[] = {
     {"help",           0, NULL, 'h'},
     {"version",        0, NULL, 'v'},
+    {"model",          0, NULL, 'l'},
     {"input",          1, NULL, 'i'},
     {"output",         1, NULL, 'o'},
     {"bin",            1, NULL, 'b'},
@@ -82,7 +86,7 @@ const struct option long_opt[] = {
     {NULL,             0, NULL,    0}
 };
 
-const char* const short_opt = "hvi:o:b:r:m:x:d:t:s:e:f:cp";
+const char* const short_opt = "hvl:i:o:b:r:m:x:d:t:s:e:f:cp";
 const char* version_info = "0.1.1";
 
 int main(int argc, char** argv)
@@ -96,6 +100,7 @@ int main(int argc, char** argv)
 	double t_create = 0.0;
 	double t_cpd = 0.0;
 
+    std::string model = "cp";
 	int max_iters = 10;
 	IType rank = 16;
 	std::vector<IType> dims;
@@ -120,6 +125,9 @@ int main(int argc, char** argv)
 		case 'v':
 			PrintVersion(argv[0]);
 			return 0;
+		case 'l':
+			model = std::string(optarg);
+			break;
 		case 'i':
 			text_file = std::string(optarg);
 			break;
@@ -296,22 +304,29 @@ int main(int argc, char** argv)
 
 	ExportKruskalModel(M, text_file_out.c_str());*/
 
-	// Convert COO to ALTO
-	AltoTensor<LIType>* AT;
-	int num_partitions = omp_get_max_threads();
-	create_alto(X, &AT, num_partitions);
+	if(model == "cp") {
+		AltoTensor<LIType>* AT;
+		// Convert COO to ALTO
+		int num_partitions = omp_get_max_threads();
+		create_alto(X, &AT, num_partitions);
 
-    BEGIN_TIMER(&ticks_start);
-    cpd_alto(AT, M, max_iters, epsilon);
-    // cpd(X, M, max_iters, epsilon);
-    END_TIMER(&ticks_end);
-    ELAPSED_TIME(ticks_start, ticks_end, &t_cpd);
-    PRINT_TIMER("CPD (ALTO)", t_cpd);
+		BEGIN_TIMER(&ticks_start);
+		cpd_alto(AT, M, max_iters, epsilon);
+		// cpd(X, M, max_iters, epsilon);
+		END_TIMER(&ticks_end);
+		ELAPSED_TIME(ticks_start, ticks_end, &t_cpd);
+		PRINT_TIMER("CPD (ALTO)", t_cpd);
+		destroy_alto(AT);
+	} else if(model == "tt") {
+		fprintf(stdout, "Executing Tensor Train decomposition\n");
+		ttd();
+	} else {
+		fprintf(stderr, "ERROR: Unrecognized decomposition model\n");
+	}
 
     // Cleanup
 	DestroySparseTensor(X);
 	DestroyKruskalModel(M);
-	destroy_alto(AT);
 
 	return 0;
 }
@@ -595,6 +610,7 @@ static void Usage(char* call)
 	fprintf(stderr, "Options:\n");
 	fprintf(stderr, "\t-h or --help         Display this information\n");
 	fprintf(stderr, "\t-v or --version      Display version information\n");
+	fprintf(stderr, "\t-l or --model        Model (cp or tt)\n");
 	fprintf(stderr, "\t-i or --input        Input tensor file in text\n");
 	fprintf(stderr, "\t-o or --output       Output tensor to file\n");
 	fprintf(stderr, "\t-b or --bin          Input tensor file in binary\n");
